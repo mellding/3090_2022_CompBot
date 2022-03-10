@@ -108,8 +108,6 @@ public class Robot extends TimedRobot {
 
     rightMotor0.setInverted(true);rightMotor1.setInverted(true);
 
-
-
     hiPressureIN.setAverageBits(4);
     loPressureIN.setAverageBits(4);
 
