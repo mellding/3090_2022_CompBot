@@ -5,7 +5,6 @@ import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.XboxController;
-import edu.wpi.first.wpilibj.DoubleSolenoid.Value;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 
 import com.revrobotics.RelativeEncoder;
@@ -13,25 +12,14 @@ import com.revrobotics.SparkMaxPIDController;
 import com.revrobotics.CANSparkMax.IdleMode;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
-import org.opencv.photo.TonemapReinhard;
-import org.w3c.dom.xpath.XPathNSResolver;
-
 import com.revrobotics.CANSparkMax;
-import com.revrobotics.CANSparkMaxLowLevel;
-
-import java.lang.module.FindException;
 
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
-import com.fasterxml.jackson.databind.ser.std.CalendarSerializer;
-import com.revrobotics.CANSparkMax;
-import com.revrobotics.CANSparkMaxLowLevel;
-import edu.wpi.first.wpilibj.GenericHID;
 import edu.wpi.first.wpilibj.PneumaticsModuleType;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.AnalogInput;
-import edu.wpi.first.wpilibj.motorcontrol.Talon;
 
 
 public class Robot extends TimedRobot {
@@ -78,6 +66,8 @@ public class Robot extends TimedRobot {
   double maxLoSpeed = .375;
   double soldeoidOnTime = 500;
 
+  boolean launcherForward = true;
+
   XboxController control00 = new XboxController(0);
 
   Compressor c = new Compressor(1, PneumaticsModuleType.CTREPCM);
@@ -108,8 +98,8 @@ public class Robot extends TimedRobot {
 
     rightMotor0.setInverted(true);rightMotor1.setInverted(true);
 
-    hiPressureIN.setAverageBits(4);
-    loPressureIN.setAverageBits(4);
+    hiPressureIN.setAverageBits(6);
+    loPressureIN.setAverageBits(6);
 
     SmartDashboard.putNumber("MaxLoSpeed", maxLoSpeed);
     SmartDashboard.putNumber("Solenoid Time", soldeoidOnTime);
@@ -145,6 +135,7 @@ public class Robot extends TimedRobot {
     SmartDashboard.putNumber("Left Enc=", leftEncoder.getPosition());
     SmartDashboard.putNumber("HiPres = ", hiPressure);
     SmartDashboard.putNumber("LoPres", loPressure);
+    SmartDashboard.putBoolean("LaunchFront", launcherForward);
     //SmartDashboard.putBoolean("A Button", control00.getAButton());
     
     maxLoSpeed =  SmartDashboard.getNumber("MaxLoSpeed", maxLoSpeed);
@@ -195,18 +186,31 @@ public class Robot extends TimedRobot {
   public void teleopPeriodic() {
 
     //**********Drive Train Section*****************************
-    if(control00.getRightTriggerAxis() > 0){
-        throttle = control00.getRightTriggerAxis();
-    }else if(control00.getLeftTriggerAxis() > 0){
-        throttle  = control00.getLeftTriggerAxis() * -1;
-    }else throttle = 0;
+    if(control00.getBackButton()  && control00.getBackButtonReleased()){
+      launcherForward = !launcherForward;
+    }
+
+    if(!launcherForward)
+      if(control00.getRightTriggerAxis() > 0){
+          throttle = control00.getRightTriggerAxis();
+      }else if(control00.getLeftTriggerAxis() > 0){
+          throttle  = control00.getLeftTriggerAxis() * -1;
+      }else throttle = 0;
+    else{
+      if(control00.getRightTriggerAxis() > 0){
+        throttle = control00.getRightTriggerAxis() * -1;
+      }else if(control00.getLeftTriggerAxis() > 0){
+        throttle  = control00.getLeftTriggerAxis();
+      }else throttle = 0;
+    }
   
-    turn      = control00.getLeftX();
+    turn  = control00.getLeftX();
 
     if(control00.getLeftBumper()){
       throttle  = throttle * maxLoSpeed;
       turn      = turn * maxLoSpeed;
     }
+
     botDrive.arcadeDrive(throttle, turn);
     //************End DRive Train Section ***********************
 
@@ -216,7 +220,7 @@ public class Robot extends TimedRobot {
         solenoid0.set(true);
         solenoid1.set(true);
         double startTime = System.currentTimeMillis();
-        while(System.currentTimeMillis() - startTime < soldeoidOnTime){}
+        while(System.currentTimeMillis() - startTime <= soldeoidOnTime){}
         solenoid0.set(false);
         solenoid1.set(false);
       }else{
@@ -225,7 +229,8 @@ public class Robot extends TimedRobot {
       }
     //********End Launch Section */
 
-    if(Math.abs(control00.getRightY()) > .1){
+
+    if(Math.abs(control00.getRightY()) > .2){
         liftMotor.set(ControlMode.PercentOutput, -control00.getRightY());
     }else {
       liftMotor.set(ControlMode.PercentOutput, 0);
