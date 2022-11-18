@@ -4,6 +4,10 @@ package frc.robot;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.InstantCommand;
+import edu.wpi.first.wpilibj2.command.ParallelDeadlineGroup;
+import edu.wpi.first.wpilibj2.command.RunCommand;
+import edu.wpi.first.wpilibj2.command.WaitCommand;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 
@@ -15,12 +19,15 @@ import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 import com.revrobotics.CANSparkMax;
 
 import com.ctre.phoenix.motorcontrol.ControlMode;
+import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
 import edu.wpi.first.wpilibj.PneumaticsModuleType;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.AnalogInput;
-
+import edu.wpi.first.cameraserver.CameraServer;
+import edu.wpi.first.cscore.UsbCamera;
+import edu.wpi.first.cscore.VideoSink;
 
 public class Robot extends TimedRobot {
   private static final String kDefaultAuto = "Default";
@@ -55,7 +62,7 @@ public class Robot extends TimedRobot {
   private RelativeEncoder leftEncoder;
   private RelativeEncoder rightEncoder;
 
-  private static final int driveMaxApmps = 38;
+  private static final int driveMaxApmps = 35;
   private static final double rampRate = 1;
 
   double rightTrigger = 0;
@@ -64,7 +71,7 @@ public class Robot extends TimedRobot {
   double throttle = 0;
   double turn = 0;
   double maxLoSpeed = .375;
-  double soldeoidOnTime = 500;
+  double soldeoidOnTime = 200;
 
   boolean launcherForward = true;
 
@@ -76,6 +83,10 @@ public class Robot extends TimedRobot {
 
   DifferentialDrive botDrive = new DifferentialDrive(leftMotor0,rightMotor0);
 
+  UsbCamera cameraLancher;
+  UsbCamera cameraPickup;
+  VideoSink server;
+
   /**
    * This function is run when the robot is first started up and should be used for any
    * initialization code.
@@ -84,7 +95,12 @@ public class Robot extends TimedRobot {
   public void robotInit() {
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
     m_chooser.addOption("My Auto", kCustomAuto);
-    SmartDashboard.putData("Auto choices", m_chooser);    
+    SmartDashboard.putData("Auto choices", m_chooser); 
+    
+    SmartDashboard.putNumber("MaxDriveAmps", driveMaxApmps); 
+    
+    SmartDashboard.putNumber("Solenoid Time", soldeoidOnTime);
+
 
     leftMotor0.restoreFactoryDefaults(); leftMotor1.restoreFactoryDefaults();
     rightMotor0.restoreFactoryDefaults(); rightMotor1.restoreFactoryDefaults();
@@ -98,15 +114,21 @@ public class Robot extends TimedRobot {
 
     rightMotor0.setInverted(true);rightMotor1.setInverted(true);
 
+    liftMotor.setNeutralMode(NeutralMode.Brake);
+
     hiPressureIN.setAverageBits(6);
     loPressureIN.setAverageBits(6);
-
-    SmartDashboard.putNumber("MaxLoSpeed", maxLoSpeed);
-    SmartDashboard.putNumber("Solenoid Time", soldeoidOnTime);
 
     c.enabled();
     solenoid0.set(false);
     solenoid1.set(false);
+
+    cameraLancher = CameraServer.startAutomaticCapture(0);
+    cameraPickup = CameraServer.startAutomaticCapture(1);
+    server = CameraServer.getServer();
+
+    leftMotor0.burnFlash();leftMotor1.burnFlash();
+    rightMotor0.burnFlash();rightMotor1.burnFlash();
 
   }
 
@@ -135,12 +157,10 @@ public class Robot extends TimedRobot {
     SmartDashboard.putNumber("Left Enc=", leftEncoder.getPosition());
     SmartDashboard.putNumber("HiPres = ", hiPressure);
     SmartDashboard.putNumber("LoPres", loPressure);
+    SmartDashboard.getNumber("MaxLoSpeed", maxLoSpeed);
+    SmartDashboard.getNumber("Solenoid Time", soldeoidOnTime);
     SmartDashboard.putBoolean("LaunchFront", launcherForward);
     //SmartDashboard.putBoolean("A Button", control00.getAButton());
-    
-    maxLoSpeed =  SmartDashboard.getNumber("MaxLoSpeed", maxLoSpeed);
-    soldeoidOnTime = SmartDashboard.getNumber("Solenoid Time", soldeoidOnTime);
-
 
   }
 
@@ -159,6 +179,7 @@ public class Robot extends TimedRobot {
     m_autoSelected = m_chooser.getSelected();
     // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
     System.out.println("Auto selected: " + m_autoSelected);
+
   }
 
   /** This function is called periodically during autonomous. */
@@ -167,10 +188,44 @@ public class Robot extends TimedRobot {
     switch (m_autoSelected) {
       case kCustomAuto:
         // Put custom auto code here
+        // new ParallelDeadlineGroup(new WaitCommand(3), new RunCommand(() -> botDrive.arcadeDrive(0.375, 0)));
+        // new ParallelDeadlineGroup(new WaitCommand(1), new RunCommand(() -> liftMotor.set(ControlMode.PercentOutput, -0.75)));
+        // solenoid0.set(true);
+        // solenoid1.set(true);
+        // double startTime = System.currentTimeMillis();
+        // while(System.currentTimeMillis() - startTime <= soldeoidOnTime){}
+        // solenoid0.set(false);
+        // solenoid1.set(false);
+
         break;
       case kDefaultAuto:
-      default:
         // Put default auto code here
+        //new ParallelDeadlineGroup(new WaitCommand(3), new RunCommand(() -> botDrive.arcadeDrive(0.375, 0)));
+        //new ParallelDeadlineGroup(new WaitCommand(1), new RunCommand(() -> liftMotor.set(ControlMode.PercentOutput, -0.75)));
+        
+        double timerThing = System.currentTimeMillis();
+        while(System.currentTimeMillis() - timerThing <= 5000){
+          botDrive.arcadeDrive(0.375, 0);
+        }
+      
+        timerThing = System.currentTimeMillis();
+        while(System.currentTimeMillis() - timerThing <= 2000){
+          botDrive.arcadeDrive(0, 0);
+          liftMotor.set(ControlMode.PercentOutput, -.5);
+        }
+
+        timerThing = System.currentTimeMillis();
+        while(System.currentTimeMillis() - timerThing <= 500) {
+          liftMotor.set(ControlMode.PercentOutput, 0);
+        }
+
+        solenoid0.set(true);
+        solenoid1.set(true);
+        double startTime = System.currentTimeMillis();
+        while(System.currentTimeMillis() - startTime <= soldeoidOnTime){}
+        solenoid0.set(false);
+        solenoid1.set(false);
+        m_autoSelected = "done";
         break;
     }
   }
@@ -178,6 +233,7 @@ public class Robot extends TimedRobot {
   /** This function is called once when teleop is enabled. */
   @Override
   public void teleopInit() {
+    //leftMotor0.
 
   }
 
@@ -185,17 +241,24 @@ public class Robot extends TimedRobot {
   @Override
   public void teleopPeriodic() {
 
+    
+    maxLoSpeed =  SmartDashboard.getNumber("MaxLoSpeed", maxLoSpeed);
+    soldeoidOnTime = SmartDashboard.getNumber("Solenoid Time", soldeoidOnTime); 
+
+
     //**********Drive Train Section*****************************
     if(control00.getBackButton()  && control00.getBackButtonReleased()){
       launcherForward = !launcherForward;
+      server.getSource();
     }
 
-    if(!launcherForward)
+    if(!launcherForward){
       if(control00.getRightTriggerAxis() > 0){
           throttle = control00.getRightTriggerAxis();
       }else if(control00.getLeftTriggerAxis() > 0){
           throttle  = control00.getLeftTriggerAxis() * -1;
       }else throttle = 0;
+    }
     else{
       if(control00.getRightTriggerAxis() > 0){
         throttle = control00.getRightTriggerAxis() * -1;
@@ -254,4 +317,6 @@ public class Robot extends TimedRobot {
   /** This function is called periodically during test mode. */
   @Override
   public void testPeriodic() {}
+
+
 }
